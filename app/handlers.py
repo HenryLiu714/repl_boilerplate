@@ -4,14 +4,16 @@ Manages command registration and execution.
 """
 
 from typing import Callable, Dict, List, Any
+from context import SessionContext
 
 
 class CommandHandler:
     """Handles command registration and execution."""
 
-    def __init__(self):
+    def __init__(self, context=None):
         """Initialize the command handler with built-in commands."""
         self.commands: Dict[str, Callable] = {}
+        self.context = context or SessionContext()
         self._register_builtin_commands()
 
     def _register_builtin_commands(self):
@@ -49,9 +51,9 @@ class CommandHandler:
             return f"Unknown command: {command}. Type 'help' for available commands."
 
         handler = self.commands[command]
-        return handler(args, kwargs)
+        return handler(self.context, args, kwargs)
 
-    def _help_command(self, args: List[str], kwargs: Dict[str, Any]) -> str:
+    def _help_command(self, context: SessionContext, args: List[str], kwargs: Dict[str, Any]) -> str:
         """
         Display help information.
 
@@ -68,7 +70,7 @@ class CommandHandler:
         help_text += "\nType '<command> --help' for command-specific help."
         return help_text
 
-    def _exit_command(self, args: List[str], kwargs: Dict[str, Any]) -> None:
+    def _exit_command(self, context: SessionContext, args: List[str], kwargs: Dict[str, Any]) -> None:
         """
         Exit the REPL.
 
@@ -78,22 +80,16 @@ class CommandHandler:
         """
         raise EOFError()
 
-
-# Example: How to add custom commands
-def example_custom_command(args: List[str], kwargs: Dict[str, Any]) -> str:
+def echo_command(context: SessionContext, args: List[str], kwargs: Dict[str, Any]) -> str:
     """
-    Example custom command implementation.
+    Echo command for testing.
 
     Args:
+        context: Session context
         args: Positional arguments
         kwargs: Keyword arguments
 
     Returns:
-        Result message
+        Echoed string
     """
-    return f"Custom command executed with args: {args}, kwargs: {kwargs}"
-
-
-# To use custom commands, register them after creating the handler:
-# handler = CommandHandler()
-# handler.register("custom", example_custom_command)
+    return ' '.join(args)
