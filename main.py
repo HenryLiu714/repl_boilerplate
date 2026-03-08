@@ -6,7 +6,11 @@ Main entry point for the REPL application.
 from app.config import Config
 from app.parser import Parser
 from app.handlers import CommandHandler
+from app.context import SessionContext
+from app.repository import InMemoryRepository
 from app.utils import setup_logging, format_response
+
+import logging
 
 
 def main():
@@ -14,10 +18,19 @@ def main():
     # Initialize components
     config = Config()
     parser = Parser()
-    handler = CommandHandler()
     logger = setup_logging(config.log_level)
 
-    handler.register("echo", lambda args, kwargs: ' '.join(args))
+    if config.log_file:
+        file_handler = logging.FileHandler(config.log_file)
+        file_handler.setLevel(getattr(logging, config.log_level.upper()))
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+    repository = InMemoryRepository()  # Initialize your repository here
+
+    context = SessionContext(logger=logger, repository=repository, config=config)  # Add repository if needed
+    handler = CommandHandler(context=context)
 
     logger.info("Starting REPL...")
     print(config.welcome_message)
