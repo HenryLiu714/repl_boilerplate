@@ -1,0 +1,12 @@
+# Core dependencies
+# (No external dependencies required for basic functionality)
+
+# Optional: Enhanced REPL features
+# prompt-toolkit==3.0.43  # For advanced input handling and autocomplete
+# colorama==0.4.6  # For colored output (cross-platform)
+# click==8.1.7  # Alternative for command parsing
+
+# Development dependencies
+# pytest==8.0.0  # For testing
+# black==24.1.1  # Code formatting
+# flake8==7.0.0  # Linting
