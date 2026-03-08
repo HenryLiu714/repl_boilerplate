@@ -3,10 +3,13 @@ Utility functions for the REPL application.
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
+from app.config import Config
 
-def setup_logging(level: str = "INFO") -> logging.Logger:
+
+def setup_logging(config: Config) -> logging.Logger:
     """
     Set up logging configuration.
 
@@ -17,10 +20,21 @@ def setup_logging(level: str = "INFO") -> logging.Logger:
         Configured logger instance
     """
     logging.basicConfig(
-        level=getattr(logging, level.upper()),
+        level=getattr(logging, config.log_level.upper()),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+
+    if config.log_file:
+        log_path = Path(config.log_file).expanduser()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.touch(exist_ok=True)
+
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setLevel(getattr(logging, config.log_level.upper()))
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        logging.getLogger().addHandler(file_handler)
 
     return logging.getLogger(__name__)
 

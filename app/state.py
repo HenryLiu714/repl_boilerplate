@@ -5,7 +5,7 @@ class State:
     """A simple class to hold the state of the REPL session."""
 
     def __init__(self):
-        pass
+        self.test = "test"
 
     def set(self, key: str, value: Any):
         """Set a value in the state."""

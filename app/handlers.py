@@ -4,7 +4,7 @@ Manages command registration and execution.
 """
 
 from typing import Callable, Dict, List, Any
-from context import SessionContext
+from app.context import SessionContext
 
 
 class CommandHandler:
@@ -92,4 +92,4 @@ def echo_command(context: SessionContext, args: List[str], kwargs: Dict[str, Any
     Returns:
         Echoed string
     """
-    return ' '.join(args)
+    return ' '.join(args) + ' ' + ' '.join(f"{key}={value}" for key, value in kwargs.items()) + " " + context.state.get("test")
