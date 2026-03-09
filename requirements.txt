@@ -1,2 +1,4 @@
 logger==1.4
 logging==0.4.9.6
+pytest==8.0.0
+pydantic==2.6.1
