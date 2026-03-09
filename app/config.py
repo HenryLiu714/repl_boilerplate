@@ -14,5 +14,5 @@ class Config:
         self.exit_message = "Goodbye!"
 
         # Logging
-        self.log_level = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+        self.log_level = "ERROR"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
         self.log_file = "logs/repl.log"

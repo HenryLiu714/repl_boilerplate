@@ -34,7 +34,7 @@ def setup_logging(config: Config) -> logging.Logger:
 
         # Create file handler
         file_handler = logging.FileHandler(config.log_file)
-        file_handler.setLevel(getattr(logging, config.log_level.upper()))
+        file_handler.setLevel(getattr(logging, "INFO"))  # Log INFO and above to file
 
         # Set formatter for file handler
         formatter = logging.Formatter(

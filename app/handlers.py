@@ -59,7 +59,8 @@ class CommandHandler:
         handler = self.commands[command]
 
         try:
-            return handler(args, kwargs)
+            a = handler(args, kwargs)
+            return a
 
         except Exception as e:
             self.context.logger.error(f"Error executing command '{command}': {e}")
@@ -114,6 +115,12 @@ class CommandHandler:
         # Update the spreadsheet state
         self.context.state.spreadsheet[cell] = self.evaluator.string_to_expression(cell, new_value)
         self.context.logger.info(f"Updated cell {cell} to '{new_value}'")
+
+        # Update upstream dependencies and mark dependents as dirty
+        self.evaluator.mark_dependencies(cell)
+        self.evaluator.update_dependencies(cell)
+        self.context.state.dirty_cells.add(cell)
+
         return f"Cell {cell} updated to '{new_value}'"
 
     def _print_command(self, args, kwargs):
@@ -158,9 +165,23 @@ class CommandHandler:
         if not cell[0].isalpha() or not cell[1:].isdigit():
             raise ValueError("Invalid cell reference. Use format like A1, B2, etc.")
 
+        if cell not in self.context.state.dirty_cells and cell in self.context.state.evaluation_cache:
+            return str(self.context.state.evaluation_cache[cell])
+
+        original_value = None
+
+        if cell in self.context.state.evaluation_cache:
+            original_value = self.context.state.evaluation_cache[cell]
+
         expression = self.context.state.spreadsheet.get(cell)
         if expression is None:
             return f"Cell {cell} is empty."
 
         result = self.evaluator.evaluate(expression)
+        self.context.state.evaluation_cache[cell] = result
+        self.context.state.dirty_cells.discard(cell)
+
+        if original_value != result:
+            self.evaluator.update_dependencies(cell) # mark dependents as dirty since this value may have changed
+
         return str(result)

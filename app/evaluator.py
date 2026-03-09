@@ -56,8 +56,6 @@ class Evaluator:
                 cells.append(f"{num_to_col(c)}{r}")
         return cells
 
-    import re
-
     def split_expression(self, expr: str):
         expr = expr.strip()
 
@@ -120,7 +118,7 @@ class Evaluator:
 
     def _verify_acyclic(self, cell: str, expr: str) -> bool:
         """Check for cyclic dependencies starting from the given cell."""
-        dependencies = set()
+        dependencies = set([cell])
 
         def recursive_helper(expr: str):
             parsed = self.split_expression(expr)
@@ -131,6 +129,9 @@ class Evaluator:
                         raise ValueError(f"Cyclic dependency detected: {cell} -> {parsed['operands'][0].upper()}")
 
                     dependencies.add(parsed["operands"][0].upper())
+
+                    for dep in self.context.state.dependencies.get(parsed["operands"][0].upper(), set()):
+                        dependencies.add(dep)
             else:
                 for operand in parsed["operands"]:
                     recursive_helper(operand)
@@ -138,6 +139,7 @@ class Evaluator:
         recursive_helper(expr)
 
         # Successful
+        dependencies.remove(cell)  # Remove self reference
         self.context.state.dependencies[cell] = dependencies
         return True
 
@@ -171,6 +173,7 @@ class Evaluator:
         if expression_str.startswith('='):
             if self._verify_acyclic(cell, expression_str[1:]):
                 self.context.logger.info(f"Expression for cell {cell} is acyclic.")
+                self.mark_dependencies(cell)
 
             exp = self._recursive_expression(expression_str[1:])
             return exp
@@ -188,11 +191,29 @@ class Evaluator:
             return expression.value
         elif expression.type == CellType.REF:
             ref_cell = expression.value.upper()
+
+            if ref_cell not in self.context.state.dirty_cells and ref_cell in self.context.state.evaluation_cache:
+                return self.context.state.evaluation_cache[ref_cell]
+
+            old_value = None
+            if ref_cell in self.context.state.dependencies.get(ref_cell, set()):
+                old_value = self.context.state.evaluation_cache.get(ref_cell)
+
             ref_expr = self.context.state.spreadsheet.get(ref_cell)
+
             if ref_expr is None:
                 self.context.logger.warning(f"Reference to empty cell {ref_cell}")
                 return None
-            return self.evaluate(ref_expr)
+
+            val = self.evaluate(ref_expr)
+
+            if val == old_value:
+                return val
+
+            self.context.state.evaluation_cache[ref_cell] = val
+            self.update_dependencies(ref_cell) # mark dependents as dirty since this value may have changed
+            return val
+
         elif expression.type == CellType.FORMULA:
             evaluated_operands = [self.evaluate(self._recursive_expression(op.raw)) for op in expression.operands]
             if expression.operator == '+':
@@ -205,6 +226,8 @@ class Evaluator:
                     result *= op
                 return result
             elif expression.operator == '/':
+                if evaluated_operands[1] == 0:
+                    raise ValueError("Division by zero error.")
                 return evaluated_operands[0] / evaluated_operands[1]
             elif expression.operator == "RANGE":
                 # For simplicity, just return a list of values for the range
@@ -213,6 +236,20 @@ class Evaluator:
                 return self._evaluate_sum(expression)
             else:
                 raise ValueError(f"Unknown operator: {expression.operator}")
+
+    def mark_dependencies(self, cell: str):
+        for other_cell in self.context.state.spreadsheet:
+            if cell in self.context.state.dependencies.get(other_cell, set()):
+                self.context.state.upward_dependencies.setdefault(cell, set()).add(other_cell)
+                self.context.state.dirty_cells.add(cell)
+
+        for dep in self.context.state.dependencies.get(cell, set()):
+            self.context.state.upward_dependencies.setdefault(dep, set()).add(cell)
+
+    def update_dependencies(self, cell: str):
+        """After a cell is updated, mark all dependent cells as dirty."""
+        for dependent in self.context.state.upward_dependencies.get(cell, set()):
+            self.context.state.dirty_cells.add(dependent)
 
     def _evaluate_range(self, expression: Expression) -> list[float | str]:
         if expression.operator != "RANGE":

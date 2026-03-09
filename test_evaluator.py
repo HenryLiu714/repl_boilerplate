@@ -4,11 +4,24 @@ Tests parsing logic, recursive evaluation, and edge cases.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 from app.evaluator import Evaluator
+from app.handlers import CommandHandler
 from app.context import SessionContext
 from app.models.expression import Expression, CellType
 from app.state import State
+
+
+def build_evaluator() -> Evaluator:
+    context = Mock(spec=SessionContext)
+    context.state = Mock(spec=State)
+    context.state.spreadsheet = {}
+    context.state.dependencies = {}
+    context.state.upward_dependencies = {}
+    context.state.dirty_cells = set()
+    context.state.evaluation_cache = {}
+    context.logger = Mock()
+    return Evaluator(context)
 
 
 class TestSplitExpression:
@@ -17,12 +30,7 @@ class TestSplitExpression:
     @pytest.fixture
     def evaluator(self):
         """Create evaluator with mocked context."""
-        context = Mock(spec=SessionContext)
-        context.state = Mock(spec=State)
-        context.state.spreadsheet = {}
-        context.state.dependencies = {}
-        context.logger = Mock()
-        return Evaluator(context)
+        return build_evaluator()
 
     def test_strip_top_level_parentheses(self, evaluator):
         """Test that top-level balanced parentheses are stripped."""
@@ -55,12 +63,7 @@ class TestArithmeticPrecedence:
     @pytest.fixture
     def evaluator(self):
         """Create evaluator with mocked context."""
-        context = Mock(spec=SessionContext)
-        context.state = Mock(spec=State)
-        context.state.spreadsheet = {}
-        context.state.dependencies = {}
-        context.logger = Mock()
-        return Evaluator(context)
+        return build_evaluator()
 
     def test_addition_and_multiplication_precedence(self, evaluator):
         """Test 10+2*5 - multiplication should be deeper in tree."""
@@ -114,12 +117,7 @@ class TestRangeParsing:
     @pytest.fixture
     def evaluator(self):
         """Create evaluator with mocked context."""
-        context = Mock(spec=SessionContext)
-        context.state = Mock(spec=State)
-        context.state.spreadsheet = {}
-        context.state.dependencies = {}
-        context.logger = Mock()
-        return Evaluator(context)
+        return build_evaluator()
 
     def test_simple_range_a1_to_a3(self, evaluator):
         """Test A1:A3 expands to 3 cells."""
@@ -165,12 +163,7 @@ class TestReferenceResolution:
     @pytest.fixture
     def evaluator(self):
         """Create evaluator with mocked spreadsheet state."""
-        context = Mock(spec=SessionContext)
-        context.state = Mock(spec=State)
-        context.state.spreadsheet = {}
-        context.state.dependencies = {}
-        context.logger = Mock()
-        return Evaluator(context)
+        return build_evaluator()
 
     def test_simple_cell_reference(self, evaluator):
         """Test that A1 reference resolves correctly."""
@@ -248,12 +241,7 @@ class TestSumFunction:
     @pytest.fixture
     def evaluator(self):
         """Create evaluator with mocked context."""
-        context = Mock(spec=SessionContext)
-        context.state = Mock(spec=State)
-        context.state.spreadsheet = {}
-        context.state.dependencies = {}
-        context.logger = Mock()
-        return Evaluator(context)
+        return build_evaluator()
 
     def test_sum_with_range(self, evaluator):
         """Test SUM(A1:A3) with numeric values."""
@@ -313,12 +301,7 @@ class TestEdgeCases:
     @pytest.fixture
     def evaluator(self):
         """Create evaluator with mocked context."""
-        context = Mock(spec=SessionContext)
-        context.state = Mock(spec=State)
-        context.state.spreadsheet = {}
-        context.state.dependencies = {}
-        context.logger = Mock()
-        return Evaluator(context)
+        return build_evaluator()
 
     def test_division_by_zero(self, evaluator):
         """Test that division by zero raises ZeroDivisionError."""
@@ -424,12 +407,7 @@ class TestRecursiveEvaluation:
     @pytest.fixture
     def evaluator(self):
         """Create evaluator with mocked context."""
-        context = Mock(spec=SessionContext)
-        context.state = Mock(spec=State)
-        context.state.spreadsheet = {}
-        context.state.dependencies = {}
-        context.logger = Mock()
-        return Evaluator(context)
+        return build_evaluator()
 
     def test_deeply_nested_arithmetic(self, evaluator):
         """Test ((1+2)*(3+4))/5."""
@@ -466,12 +444,56 @@ class TestHelperMethods:
     @pytest.fixture
     def evaluator(self):
         """Create evaluator with mocked context."""
-        context = Mock(spec=SessionContext)
-        context.state = Mock(spec=State)
-        context.state.spreadsheet = {}
-        context.state.dependencies = {}
-        context.logger = Mock()
-        return Evaluator(context)
+        return build_evaluator()
+
+
+class TestEvaluationCache:
+    """Test suite for cache behavior and invalidation."""
+
+    @pytest.fixture
+    def evaluator(self):
+        """Create evaluator with mocked context."""
+        return build_evaluator()
+
+    @pytest.fixture
+    def setup_handler(self):
+        evaluator = build_evaluator()
+        handler = CommandHandler(context=evaluator.context, evaluator=evaluator)
+        return evaluator, handler
+
+    def test_evaluate_command_uses_cached_value_when_cell_clean(self, setup_handler):
+        evaluator, handler = setup_handler
+        evaluator.context.state.spreadsheet["A1"] = Expression(
+            raw="10", type=CellType.NUMBER, value=10.0
+        )
+        evaluator.context.state.evaluation_cache["A1"] = 999.0
+
+        result = handler._evaluate_command(["A1"], {})
+        assert result == "999.0"
+
+    def test_dependent_cell_recomputes_after_source_update(self, setup_handler):
+        evaluator, handler = setup_handler
+
+        evaluator.context.state.spreadsheet["A1"] = Expression(
+            raw="1", type=CellType.NUMBER, value=1.0
+        )
+        evaluator.context.state.spreadsheet["B1"] = evaluator.string_to_expression("B1", "=A1+1")
+        evaluator.context.state.upward_dependencies["A1"] = {"B1"}
+
+        first_b1 = handler._evaluate_command(["B1"], {})
+        assert first_b1 == "2.0"
+
+        evaluator.context.state.spreadsheet["A1"] = Expression(
+            raw="5", type=CellType.NUMBER, value=5.0
+        )
+        evaluator.context.state.dirty_cells.add("A1")
+
+        refreshed_a1 = handler._evaluate_command(["A1"], {})
+        assert refreshed_a1 == "5.0"
+        assert "B1" in evaluator.context.state.dirty_cells
+
+        refreshed_b1 = handler._evaluate_command(["B1"], {})
+        assert refreshed_b1 == "6.0"
 
     def test_is_balanced_true(self, evaluator):
         """Test that balanced parentheses are detected."""
