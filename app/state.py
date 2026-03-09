@@ -1,11 +1,14 @@
 
-from typing import Any
+from typing import Any, Dict
+from app.models.expression import Expression
+
 
 class State:
     """A simple class to hold the state of the REPL session."""
 
     def __init__(self):
-        pass
+        self.spreadsheet: Dict[str, Expression] = {} # Map of cell references to their values
+        self.dependencies: Dict[str, set[str]] = {} # For cycle detection and update propagation
 
     def set(self, key: str, value: Any):
         """Set a value in the state."""

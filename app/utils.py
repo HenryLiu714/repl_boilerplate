@@ -3,10 +3,12 @@ Utility functions for the REPL application.
 """
 
 import logging
+import os
+from pathlib import Path
 from typing import Any
+from app.config import Config
 
-
-def setup_logging(level: str = "INFO") -> logging.Logger:
+def setup_logging(config: Config) -> logging.Logger:
     """
     Set up logging configuration.
 
@@ -17,12 +19,34 @@ def setup_logging(level: str = "INFO") -> logging.Logger:
         Configured logger instance
     """
     logging.basicConfig(
-        level=getattr(logging, level.upper()),
+        level=getattr(logging, config.log_level.upper()),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    return logging.getLogger(__name__)
+    logger = logging.getLogger(__name__)
+
+    # Add file handler if log_file is configured
+    if config.log_file:
+        # Create directory if it doesn't exist
+        log_path = Path(config.log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Create file handler
+        file_handler = logging.FileHandler(config.log_file)
+        file_handler.setLevel(getattr(logging, config.log_level.upper()))
+
+        # Set formatter for file handler
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+
+        # Add handler to logger
+        logger.addHandler(file_handler)
+
+    return logger
 
 
 def format_response(response: Any) -> str:
